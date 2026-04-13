@@ -3,7 +3,7 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "homepage": "https://YOUR_GITHUB_USERNAME.github.io/qld-trend-dashboard",
+  "homepage": "https://Oleksnikolenko.github.io/qld-trend-dashboard",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
