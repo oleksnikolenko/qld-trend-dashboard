@@ -591,6 +591,7 @@ export default function Dashboard() {
           Strategy based on "Leverage for the Long Run" (Gayed, 2016) and Faber's Tactical Asset Allocation research.
           <br />QQQ monthly closes sourced from Yahoo Finance / StockAnalysis.com. This is not financial advice. Past performance does not guarantee future results.
           {liveError && <div style={{ color: C.amber, marginTop: 4 }}>{liveError}</div>}
+          <div style={{ marginTop: 6, color: C.textMuted }}>Last updated: {__BUILD_TIME__} PT</div>
         </div>
       </div>
 
