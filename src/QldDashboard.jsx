@@ -215,53 +215,96 @@ function ChartTooltip({ active, payload }) {
 export default function Dashboard() {
   const [livePrice, setLivePrice] = useState(null);
   const [liveError, setLiveError] = useState(null);
+  const [realSma, setRealSma] = useState(null);
+  const [mergedData, setMergedData] = useState(RAW_DATA);
   const [tab, setTab] = useState("chart");
   const [chartRange, setChartRange] = useState("ALL");
 
-  // Attempt to fetch live QQQ quote
   useEffect(() => {
-    const YF_URL = "https://query1.finance.yahoo.com/v8/finance/chart/QQQ?interval=1d&range=1d";
+    const LIVE_URL = "https://query1.finance.yahoo.com/v8/finance/chart/QQQ?interval=1d&range=1d";
+    const MONTHLY_URL = "https://query1.finance.yahoo.com/v8/finance/chart/QQQ?interval=1mo&range=2y";
 
-    const parseYF = (json) => {
-      const meta = json?.chart?.result?.[0]?.meta;
-      if (meta?.regularMarketPrice) {
-        setLivePrice({ price: meta.regularMarketPrice, prevClose: meta.chartPreviousClose, time: new Date(meta.regularMarketTime * 1000) });
-        return true;
-      }
-      return false;
-    };
-
-    const fetchLive = async () => {
-      // 1. Try allorigins.win CORS proxy → Yahoo Finance
+    const fetchViaProxies = async (url) => {
       try {
-        const res = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(YF_URL)}`);
+        const res = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(url)}`);
         if (res.ok) {
           const wrapper = await res.json();
-          const json = JSON.parse(wrapper.contents);
-          if (parseYF(json)) return;
+          return JSON.parse(wrapper.contents);
         }
       } catch (_) {}
-
-      // 2. Try corsproxy.io → Yahoo Finance
       try {
-        const res = await fetch(`https://corsproxy.io/?${encodeURIComponent(YF_URL)}`);
-        if (res.ok) {
-          const json = await res.json();
-          if (parseYF(json)) return;
-        }
+        const res = await fetch(`https://corsproxy.io/?${encodeURIComponent(url)}`);
+        if (res.ok) return res.json();
       } catch (_) {}
-
-      setLiveError("Live data unavailable — showing latest month-end close");
+      return null;
     };
-    fetchLive();
+
+    const fetchAll = async () => {
+      const [liveJson, monthlyJson] = await Promise.all([
+        fetchViaProxies(LIVE_URL),
+        fetchViaProxies(MONTHLY_URL),
+      ]);
+
+      // Parse live price
+      let livePx = null;
+      if (liveJson) {
+        const meta = liveJson?.chart?.result?.[0]?.meta;
+        if (meta?.regularMarketPrice) {
+          livePx = meta.regularMarketPrice;
+          setLivePrice({ price: livePx, prevClose: meta.chartPreviousClose, time: new Date(meta.regularMarketTime * 1000) });
+        }
+      }
+
+      // Parse monthly closes, compute real 10M SMA, merge into chart data
+      if (monthlyJson) {
+        const result = monthlyJson?.chart?.result?.[0];
+        const timestamps = result?.timestamp;
+        const closes = result?.indicators?.quote?.[0]?.close;
+
+        if (timestamps && closes && timestamps.length >= 10) {
+          const now = new Date();
+          const currentYM = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
+          const fetchedMonthly = timestamps
+            .map((ts, i) => {
+              const d = new Date(ts * 1000);
+              const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+              return { ym, close: closes[i] };
+            })
+            .filter(d => d.close != null);
+
+          // Completed months only (exclude the in-progress current month bar)
+          const completedMonthly = fetchedMonthly.filter(d => d.ym < currentYM);
+
+          // Merge fetched closes into RAW_DATA (fetched data wins for recent months)
+          const dataMap = new Map(RAW_DATA.map(([m, c]) => [m, c]));
+          fetchedMonthly.forEach(({ ym, close }) => dataMap.set(ym, close));
+          const merged = [...dataMap.entries()].sort(([a], [b]) => a.localeCompare(b));
+          setMergedData(merged);
+
+          // Real 10M SMA = avg of last 9 completed month-end closes + current live price
+          if (completedMonthly.length >= 9) {
+            const last9 = completedMonthly.slice(-9).map(d => d.close);
+            const tenthValue = livePx ?? completedMonthly[completedMonthly.length - 1].close;
+            setRealSma(last9.reduce((a, b) => a + b, 0) / 9 * 9 / 10 + tenthValue / 10);
+          }
+        }
+      }
+
+      if (!liveJson && !monthlyJson) {
+        setLiveError("Live data unavailable — showing latest month-end close");
+      }
+    };
+
+    fetchAll();
   }, []);
 
-  const { rows, changes, periods } = useMemo(() => computeStrategy(RAW_DATA), []);
+  const { rows, changes, periods } = useMemo(() => computeStrategy(mergedData), [mergedData]);
   const roundTrips = useMemo(() => analyzeTradeRoundTrips(changes), [changes]);
 
   const current = rows[rows.length - 1];
   const displayPrice = livePrice?.price || current.close;
-  const liveSmaEstimate = current.sma; // SMA doesn't change intra-month
+  const liveSmaEstimate = realSma ?? current.sma;
   const liveMarginPct = ((displayPrice - liveSmaEstimate) / liveSmaEstimate) * 100;
   const liveSignal = displayPrice > liveSmaEstimate ? "RISK_ON" : "RISK_OFF";
 
@@ -320,7 +363,7 @@ export default function Dashboard() {
               </div>
             </div>
             <div style={{ display: "flex", gap: 32, flexWrap: "wrap" }}>
-              <Metric label="10M SMA" value={`$${liveSmaEstimate.toFixed(2)}`} color={C.smaLine} />
+              <Metric label={realSma ? "10M SMA (live)" : "10M SMA (est.)"} value={`$${liveSmaEstimate.toFixed(2)}`} color={C.smaLine} />
               <Metric label="Margin" value={`${pctToFlip >= 0 ? "+" : ""}${pctToFlip.toFixed(2)}%`} sub={`$${distToFlip >= 0 ? "+" : ""}${distToFlip.toFixed(2)}`} color={pctToFlip >= 0 ? C.green : C.red} />
               <Metric label={pctToFlip >= 0 ? "Distance to Sell Signal" : "Distance to Buy Signal"} value={`$${Math.abs(distToFlip).toFixed(2)}`} sub={`${Math.abs(pctToFlip).toFixed(2)}% ${pctToFlip >= 0 ? "above" : "below"} SMA`} color={C.textDim} />
             </div>
