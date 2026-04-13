@@ -341,15 +341,6 @@ export default function Dashboard() {
             <div style={{ fontSize: 11, fontFamily: font, color: C.textDim }}>QQQ 10-Month SMA · Monthly Signal</div>
           </div>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-          <div style={{ textAlign: "right" }}>
-            <div style={{ fontSize: 11, fontFamily: font, color: C.textDim }}>QQQ {livePrice ? "LIVE" : "LAST CLOSE"}</div>
-            <div style={{ fontSize: 20, fontFamily: font, fontWeight: 700, color: C.text }}>${displayPrice.toFixed(2)}</div>
-          </div>
-          {livePrice && (
-            <div style={{ width: 6, height: 6, borderRadius: "50%", background: C.green, boxShadow: `0 0 6px ${C.green}`, animation: "pulse 2s infinite" }} />
-          )}
-        </div>
       </div>
 
       <div style={{ maxWidth: 1200, margin: "0 auto", padding: "20px 20px 40px" }}>
@@ -364,10 +355,15 @@ export default function Dashboard() {
                 {liveSignal === "RISK_ON" ? "Hold 100% QLD (ProShares Ultra QQQ, 2x)" : "Hold 100% SGOV (iShares 0-3M Treasury)"}
               </div>
             </div>
-            <div style={{ display: "flex", gap: 32, flexWrap: "wrap" }}>
-              <Metric label={realSma ? "10M SMA (live)" : "10M SMA (est.)"} value={`$${liveSmaEstimate.toFixed(2)}`} color={C.smaLine} />
+            <div style={{ display: "flex", gap: 32, flexWrap: "wrap", alignItems: "flex-start" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <Metric label={`QQQ ${livePrice ? "LIVE" : "LAST CLOSE"}`} value={`$${displayPrice.toFixed(2)}`} color={C.qqqLine} />
+                {livePrice && <div style={{ width: 6, height: 6, borderRadius: "50%", background: C.green, boxShadow: `0 0 6px ${C.green}`, animation: "pulse 2s infinite", marginTop: 18 }} />}
+              </div>
+              <Metric label="10M SMA (live)" value={realSma ? `$${realSma.toFixed(2)}` : "—"} color={realSma ? C.smaLine : C.textMuted} />
+              <Metric label="10M SMA (est.)" value={`$${current.sma.toFixed(2)}`} color={C.textMuted} />
               <Metric label="Margin" value={`${pctToFlip >= 0 ? "+" : ""}${pctToFlip.toFixed(2)}%`} sub={`$${distToFlip >= 0 ? "+" : ""}${distToFlip.toFixed(2)}`} color={pctToFlip >= 0 ? C.green : C.red} />
-              <Metric label={pctToFlip >= 0 ? "Distance to Sell Signal" : "Distance to Buy Signal"} value={`$${Math.abs(distToFlip).toFixed(2)}`} sub={`${Math.abs(pctToFlip).toFixed(2)}% ${pctToFlip >= 0 ? "above" : "below"} SMA`} color={C.textDim} />
+              <Metric label={pctToFlip >= 0 ? "Distance to Sell" : "Distance to Buy"} value={`$${Math.abs(distToFlip).toFixed(2)}`} sub={`${Math.abs(pctToFlip).toFixed(2)}% ${pctToFlip >= 0 ? "above" : "below"} SMA`} color={C.textDim} />
             </div>
           </div>
         </Card>
