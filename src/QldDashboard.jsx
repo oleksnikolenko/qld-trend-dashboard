@@ -220,30 +220,37 @@ export default function Dashboard() {
 
   // Attempt to fetch live QQQ quote
   useEffect(() => {
+    const YF_URL = "https://query1.finance.yahoo.com/v8/finance/chart/QQQ?interval=1d&range=1d";
+
+    const parseYF = (json) => {
+      const meta = json?.chart?.result?.[0]?.meta;
+      if (meta?.regularMarketPrice) {
+        setLivePrice({ price: meta.regularMarketPrice, prevClose: meta.chartPreviousClose, time: new Date(meta.regularMarketTime * 1000) });
+        return true;
+      }
+      return false;
+    };
+
     const fetchLive = async () => {
+      // 1. Try allorigins.win CORS proxy → Yahoo Finance
       try {
-        // Try Yahoo Finance v8 (may be blocked by CORS in some contexts)
-        const res = await fetch("https://query1.finance.yahoo.com/v8/finance/chart/QQQ?interval=1d&range=1d");
+        const res = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(YF_URL)}`);
         if (res.ok) {
-          const json = await res.json();
-          const meta = json?.chart?.result?.[0]?.meta;
-          if (meta?.regularMarketPrice) {
-            setLivePrice({ price: meta.regularMarketPrice, prevClose: meta.chartPreviousClose, time: new Date(meta.regularMarketTime * 1000) });
-            return;
-          }
-        }
-      } catch (_) { /* CORS blocked - expected in artifact context */ }
-      try {
-        // Fallback: Try financialmodelingprep free tier
-        const res2 = await fetch("https://financialmodelingprep.com/api/v3/quote-short/QQQ?apikey=demo");
-        if (res2.ok) {
-          const json2 = await res2.json();
-          if (json2?.[0]?.price) {
-            setLivePrice({ price: json2[0].price, prevClose: null, time: new Date() });
-            return;
-          }
+          const wrapper = await res.json();
+          const json = JSON.parse(wrapper.contents);
+          if (parseYF(json)) return;
         }
       } catch (_) {}
+
+      // 2. Try corsproxy.io → Yahoo Finance
+      try {
+        const res = await fetch(`https://corsproxy.io/?${encodeURIComponent(YF_URL)}`);
+        if (res.ok) {
+          const json = await res.json();
+          if (parseYF(json)) return;
+        }
+      } catch (_) {}
+
       setLiveError("Live data unavailable — showing latest month-end close");
     };
     fetchLive();
