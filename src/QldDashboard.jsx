@@ -225,16 +225,18 @@ export default function Dashboard() {
     const MONTHLY_URL = "https://query1.finance.yahoo.com/v8/finance/chart/QQQ?interval=1mo&range=2y";
 
     const fetchViaProxies = async (url) => {
+      // 1. allorigins /raw — direct JSON response, no wrapper parsing needed
+      try {
+        const res = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`);
+        if (res.ok) return res.json();
+      } catch (_) {}
+      // 2. allorigins /get — wrapped fallback (corsproxy.io is 403 on free plan)
       try {
         const res = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(url)}`);
         if (res.ok) {
           const wrapper = await res.json();
-          return JSON.parse(wrapper.contents);
+          if (wrapper.contents) return JSON.parse(wrapper.contents);
         }
-      } catch (_) {}
-      try {
-        const res = await fetch(`https://corsproxy.io/?${encodeURIComponent(url)}`);
-        if (res.ok) return res.json();
       } catch (_) {}
       return null;
     };
